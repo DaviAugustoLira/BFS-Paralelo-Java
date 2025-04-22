@@ -15,16 +15,16 @@ public class Main {
 
         Graph grafo = new SingleGraph("Grafo");
 
-        for (int i = 0; i < 10000; i++) {
+        for (int i = 0; i < 100000; i++) {
             String id = String.valueOf(i);
             Node node = grafo.addNode(id);
         }
 
         // Gerar arestas aleatórias
         Random rand = new Random();
-        for (int i = 0; i < 50000; i++) {
-            int source = rand.nextInt(10000);
-            int target = rand.nextInt(10000);
+        for (int i = 0; i < 500000; i++) {
+            int source = rand.nextInt(100000);
+            int target = rand.nextInt(100000);
             if (source != target) {
                 String edgeId = source + "-" + target;
                 if (grafo.getEdge(edgeId) == null && grafo.getEdge(target + "-" + source) == null) {
@@ -37,11 +37,13 @@ public class Main {
     }
 
     public static void bfs(Graph grafo, String idNoInicial, String noBuscado, long tempoInicial) {
-        final int NUM_THREADS = 2;
+        final int NUM_THREADS = 4;
 
         Set<String> visitados = ConcurrentHashMap.newKeySet();
         Queue<Node> fila = new ConcurrentLinkedQueue<>();
         Node noInicial = grafo.getNode(idNoInicial);
+
+        ExecutorService executor = Executors.newFixedThreadPool(NUM_THREADS);
 
         fila.add(noInicial);
         visitados.add(idNoInicial);
@@ -55,16 +57,23 @@ public class Main {
 
             List<Node> descobertos = Collections.synchronizedList(new ArrayList<>());
             CountDownLatch latch = new CountDownLatch(nivelAtual.size());
-            Semaphore semaphore = new Semaphore(NUM_THREADS);
 
             for (Node atual : nivelAtual) {
-                if (noBuscado.equals(atual.getId())) {
-                    System.out.println("Nó encontrado: " + atual.getId());
-                    System.out.println("Tempo de execução: " + (System.currentTimeMillis() - tempoInicial) + "ms");
-                    return;
-                }
-                Runnable thread = new ThreadBfs(semaphore, visitados, atual, latch, descobertos);
-                new Thread(thread).start();
+                executor.submit( () -> {
+                    if (noBuscado.equals(atual.getId())) {
+                        System.out.println("Nó encontrado: " + atual.getId());
+                        System.out.println("Tempo de execução: " + (System.currentTimeMillis() - tempoInicial) + "ms");
+                        executor.shutdownNow();
+                        return;
+                    }
+                    for (Edge edge : atual.edges().toList()) {
+                        Node vizinho = edge.getOpposite(atual);
+                        if (visitados.add(vizinho.getId())) {
+                            descobertos.add(vizinho);
+                        }
+                    }
+                    latch.countDown();
+                });
             }
 
             try {
@@ -77,5 +86,6 @@ public class Main {
         }
 
         System.out.println("Nó não encontrado.");
+        executor.shutdown();
     }
 }
