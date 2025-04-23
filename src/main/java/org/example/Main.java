@@ -7,6 +7,7 @@ import org.graphstream.graph.implementations.SingleGraph;
 
 import java.util.*;
 import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 
 public class Main {
@@ -37,33 +38,37 @@ public class Main {
     }
 
     public static void bfs(Graph grafo, String idNoInicial, String noBuscado, long tempoInicial) {
-        final int NUM_THREADS = 4;
+        final int NUM_THREADS = 8;
 
         Set<String> visitados = ConcurrentHashMap.newKeySet();
         Queue<Node> fila = new ConcurrentLinkedQueue<>();
         Node noInicial = grafo.getNode(idNoInicial);
+        AtomicBoolean encontrado = new AtomicBoolean(false);
 
         ExecutorService executor = Executors.newFixedThreadPool(NUM_THREADS);
 
         fila.add(noInicial);
         visitados.add(idNoInicial);
 
-        while (!fila.isEmpty()) {
+        while (!fila.isEmpty() && !encontrado.get()) {
             List<Node> nivelAtual = new ArrayList<>();
             while (!fila.isEmpty()) {
                 Node n = fila.poll();
                 if (n != null) nivelAtual.add(n);
             }
 
-            List<Node> descobertos = Collections.synchronizedList(new ArrayList<>());
+            Queue<Node> descobertos = new ConcurrentLinkedQueue<>();
             CountDownLatch latch = new CountDownLatch(nivelAtual.size());
 
             for (Node atual : nivelAtual) {
                 executor.submit( () -> {
+                    if(encontrado.get()){
+                        return;
+                    }
                     if (noBuscado.equals(atual.getId())) {
                         System.out.println("Nó encontrado: " + atual.getId());
                         System.out.println("Tempo de execução: " + (System.currentTimeMillis() - tempoInicial) + "ms");
-                        executor.shutdownNow();
+                        encontrado.set(true);
                         return;
                     }
                     for (Edge edge : atual.edges().toList()) {
