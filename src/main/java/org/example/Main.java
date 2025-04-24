@@ -12,20 +12,19 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 public class Main {
     public static void main(String[] args) {
-        long tempoInicial = System.currentTimeMillis();
 
         Graph grafo = new SingleGraph("Grafo");
 
-        for (int i = 0; i < 100000; i++) {
+        for (int i = 0; i < 1000000; i++) {
             String id = String.valueOf(i);
-            Node node = grafo.addNode(id);
+            grafo.addNode(id);
         }
 
         // Gerar arestas aleatórias
         Random rand = new Random();
-        for (int i = 0; i < 500000; i++) {
-            int source = rand.nextInt(100000);
-            int target = rand.nextInt(100000);
+        for (int i = 0; i < 5000000; i++) {
+            int source = rand.nextInt(1000000);
+            int target = rand.nextInt(1000000);
             if (source != target) {
                 String edgeId = source + "-" + target;
                 if (grafo.getEdge(edgeId) == null && grafo.getEdge(target + "-" + source) == null) {
@@ -34,11 +33,13 @@ public class Main {
             }
         }
 
-        bfs(grafo, "0", "9999", tempoInicial);
+        bfs(grafo, "0", "999999");
     }
 
-    public static void bfs(Graph grafo, String idNoInicial, String noBuscado, long tempoInicial) {
-        final int NUM_THREADS = 8;
+    public static void bfs(Graph grafo, String idNoInicial, String noBuscado) {
+        long tempoInicial = System.currentTimeMillis();
+
+        final int NUM_THREADS = 4;
 
         Set<String> visitados = ConcurrentHashMap.newKeySet();
         Queue<Node> fila = new ConcurrentLinkedQueue<>();
@@ -57,40 +58,42 @@ public class Main {
                 if (n != null) nivelAtual.add(n);
             }
 
-            Queue<Node> descobertos = new ConcurrentLinkedQueue<>();
+//            Queue<Node> descobertos = new ConcurrentLinkedQueue<>();
             CountDownLatch latch = new CountDownLatch(nivelAtual.size());
 
             for (Node atual : nivelAtual) {
+                if(encontrado.get()){
+                    executor.shutdownNow();
+                    return;
+                }
+
+                if (noBuscado.equals(atual.getId())) {
+                    System.out.println("Nó encontrado: " + atual.getId());
+                    System.out.println("Tempo de execução: " + (System.currentTimeMillis() - tempoInicial) + "ms");
+                    encontrado.set(true);
+                    return;
+                }
+
                 executor.submit( () -> {
-                    if(encontrado.get()){
-                        return;
-                    }
-                    if (noBuscado.equals(atual.getId())) {
-                        System.out.println("Nó encontrado: " + atual.getId());
-                        System.out.println("Tempo de execução: " + (System.currentTimeMillis() - tempoInicial) + "ms");
-                        encontrado.set(true);
-                        return;
-                    }
-                    for (Edge edge : atual.edges().toList()) {
-                        Node vizinho = edge.getOpposite(atual);
-                        if (visitados.add(vizinho.getId())) {
-                            descobertos.add(vizinho);
-                        }
-                    }
+                    atual.edges().forEach( element -> {
+                            Node vizinho = element.getOpposite(atual);
+                            if(visitados.add(vizinho.getId())){
+                            fila.add(vizinho);
+                            }
+                        });
                     latch.countDown();
                 });
             }
-
             try {
                 latch.await();
             } catch (InterruptedException e) {
                 throw new RuntimeException(e);
             }
 
-            fila.addAll(descobertos);
+//            fila.addAll(descobertos);
         }
 
         System.out.println("Nó não encontrado.");
-        executor.shutdown();
+        executor.shutdownNow();
     }
 }
